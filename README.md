@@ -1,4 +1,4 @@
-# SolveThisJim
+# SolveThisJim ( Note: In Developement )
 
 This is a github bot to solve issues and PR's and produceses responses.
 
