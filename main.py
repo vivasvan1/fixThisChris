@@ -2,14 +2,21 @@ from flask import Flask, request, jsonify
 import openai
 import requests
 import os
+import logging
+
+from env import OPENAI_API_KEY, GITHUB_ACCESS_TOKEN
+from github_utils import run_query
+
 app = Flask(__name__)
 
-# GitHub API authentication
-GITHUB_ACCESS_TOKEN = os.getenv("GITHUB_ACCESS_TOKEN")
-
-# OpenAI API authentication
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 openai.api_key = OPENAI_API_KEY
+
+
+# Initialize logging
+logging.basicConfig(level=logging.INFO)
+
+from commons import send_github_request
+
 
 import time
 import atexit
@@ -25,13 +32,12 @@ def fetch_repository_invites():
         "Authorization": f"Bearer {GITHUB_ACCESS_TOKEN}",
         "Accept": "application/vnd.github.v3+json",
     }
-    response = requests.get(fetch_invites_url, headers=headers)
-    if response.status_code == 200:
-        invites = response.json()
-        return invites
+    invites = send_github_request(fetch_invites_url, "GET", headers)
+    if invites:
+        return invites.json()
     else:
-        print("Failed to fetch repository invitations")
-        return []
+        logging.error("Failed to fetch repository invitations")
+        return None
 
 
 def accept_repository_invitation(invitation_id):
@@ -41,16 +47,23 @@ def accept_repository_invitation(invitation_id):
         "Accept": "application/vnd.github.v3+json",
         "X-GitHub-Api-Version": "2022-11-28",  # Use the appropriate API version
     }
-    response = requests.patch(accept_url, headers=headers)
+    response = send_github_request(accept_url, "PATCH", headers)
     return response
 
 
 def accept_github_invitations():
     repository_invites = fetch_repository_invites()
 
+    if not repository_invites:
+        return
+
     for invite in repository_invites:
         invitation_id = invite.get("id")
         response = accept_repository_invitation(invitation_id)
+
+        if not response:
+            continue
+
         if response.status_code == 204:
             print(f"Accepted repository invitation with ID {invitation_id}")
         else:
@@ -64,38 +77,35 @@ def fetch_unread_mentions():
         "Authorization": f"Bearer {GITHUB_ACCESS_TOKEN}",
         "Accept": "application/vnd.github.v3+json",
     }
-    response = requests.get(notifications_url, headers=headers)
-    if response.status_code == 200:
-        notifications = response.json()
-        unread_mentions = [
-            notification
-            for notification in notifications
-            if (("mention" in notification["reason"]) and notification["unread"])
-        ]
-        return unread_mentions
-    else:
+    notifications = send_github_request(notifications_url, "GET", headers)
+    if not notifications:
         print("Failed to fetch notifications")
         return []
 
+    notifications = notifications.json()
+    unread_mentions = [
+        notification
+        for notification in notifications
+        if (("mention" in notification["reason"]) and notification["unread"])
+    ]
+    return unread_mentions
+
 
 def mark_issue_notification_as_read(id, issue_number):
-    # Mark notification as read
     mark_as_read_url = f"https://api.github.com/notifications/threads/{id}"
     headers = {
         "Authorization": f"Bearer {GITHUB_ACCESS_TOKEN}",
         "Accept": "application/vnd.github.v3+json",
     }
-    response = requests.patch(mark_as_read_url, headers=headers)
-    if response.status_code == 205:
+    response = send_github_request(mark_as_read_url, "PATCH", headers)
+
+    if response:
         print(f"Marked issue {issue_number} as read")
     else:
-        print(
-            f"Failed to mark issue {issue_number} as read | Status Code: {response.status_code}"
-        )
+        print(f"Failed to mark issue {issue_number} as read")
 
 
 def fetch_issue(repo_owner, repo_name, issue_number):
-    print(f"Fetching issue #{issue_number} #{repo_owner}/{repo_name}")
     fetch_issue_url = (
         f"https://api.github.com/repos/{repo_owner}/{repo_name}/issues/{issue_number}"
     )
@@ -103,11 +113,9 @@ def fetch_issue(repo_owner, repo_name, issue_number):
         "Authorization": f"Bearer {GITHUB_ACCESS_TOKEN}",
         "Accept": "application/vnd.github.v3+json",
     }
-    response = requests.get(fetch_issue_url, headers=headers)
-
-    if response.status_code == 200:
-        issue_data = response.json()
-        return issue_data
+    issue_data = send_github_request(fetch_issue_url, "GET", headers)
+    if issue_data:
+        return issue_data.json()
     else:
         print(f"Failed to fetch issue #{issue_number}")
         return None
@@ -118,15 +126,16 @@ def fetch_issue_comments(comments_url):
         "Authorization": f"Bearer {GITHUB_ACCESS_TOKEN}",
         "Accept": "application/vnd.github.v3+json",
     }
-    response = requests.get(comments_url, headers=headers)
+    comments = send_github_request(comments_url, "GET", headers)
 
-    if response.status_code == 200:
-        print(f"Fetched {len(response.json())} comments")
-        comments = response.json()
-        return comments
-    else:
-        print(f"Failed to fetch issue comments")
+    if not comments:
+        print("Failed to fetch issue comments")
         return None
+
+    comments = comments.json()
+    if comments:
+        print(f"Fetched {len(comments)} comments")
+        return comments
 
 
 def generate_gpt_prompt(issue_data):
@@ -134,20 +143,27 @@ def generate_gpt_prompt(issue_data):
     issue_body = issue_data.get("body")
     issue_comments_url = issue_data.get("comments_url")
 
-    issue_comments = fetch_issue_comments(issue_comments_url)
-
     issue_comments_prompt = ""
-    for comment in issue_comments:
-        issue_comments_prompt += (
-            f"\nuser: {comment.get('user').get('login')} comment:{comment.get('body')}"
-        )
+    issue_comments = fetch_issue_comments(issue_comments_url)
+    if issue_comments:
+        for comment in issue_comments:
+            if not (
+                comment.get("user").get("login") == "SolveThisJim"
+                or comment.get("user").get("login") == "github-actions[bot]"
+                or comment.get("user").get("login") == "dependabot[bot]"
+            ):
+                issue_comments_prompt += f"\nuser: {comment.get('user').get('login')} comment:{comment.get('body')}"
 
-    gpt_prompt = f"Issue title: {issue_title}\nIssue Description: {issue_body}\nIssue Comments: {issue_comments_prompt}"
+    gpt_prompt = f"Issue title: {issue_title}\nIssue Description: {issue_body}\n\n"
+    if issue_comments_prompt != "":
+        gpt_prompt += f"Issue Comments: {issue_comments_prompt}\n"
+
     return gpt_prompt
 
 
 def respond_to_unread_issues():
     unread_mentions = fetch_unread_mentions()
+    # print(unread_mentions)
 
     for mention in unread_mentions:
         issue_number = mention["subject"]["url"].split("/")[-1]
@@ -160,19 +176,32 @@ def respond_to_unread_issues():
             issue_number,
         )
 
+        if not issue_data:
+            continue
         prompt = generate_gpt_prompt(issue_data)
-        # print(prompt)
+
+        out = run_query(
+            prompt,
+            mention["repository"]["owner"]["login"],
+            mention["repository"]["name"],
+        )
+
         # response = generate_response(issue_description)
         # print(response)
-        # post_comment_to_issue(issue_number, response, "solveitjim", mention["repository"]["name"])
+        post_comment_to_issue(
+            issue_number,
+            out,
+            mention["repository"]["owner"]["login"],
+            mention["repository"]["name"],
+        )
 
         # Mark notification as read
-        # mark_issue_notification_as_read(mention['id'], issue_number)
+        mark_issue_notification_as_read(mention["id"], issue_number)
 
 
 scheduler = BackgroundScheduler()
-scheduler.add_job(func=accept_github_invitations, trigger="interval", seconds=10)
-scheduler.add_job(func=respond_to_unread_issues, trigger="interval", seconds=10)
+scheduler.add_job(func=accept_github_invitations, trigger="interval", seconds=30)
+scheduler.add_job(func=respond_to_unread_issues, trigger="interval", seconds=30)
 scheduler.start()
 
 # Shut down the scheduler when exiting the app
@@ -205,7 +234,7 @@ def generate_response(prompt):
         ],
     )
 
-    return completion.choices[0].message.content
+    return completion.choices[0].message.content  # type: ignore
 
 
 def post_comment_to_issue(issue_number, comment_text, OWNER, REPO):

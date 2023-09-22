@@ -25,3 +25,7 @@ python main.py
 ## Notes
 
 join the community discord for questions or feedback.
+
+## Credits
+
+- [Repo-Chat by mckaywrigley](https://github.com/mckaywrigley/repo-chat)
