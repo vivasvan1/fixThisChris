@@ -5,9 +5,10 @@ import requests
 import os
 
 from env import GITHUB_ACCESS_TOKEN
+from typing import Optional
 
 
-def send_github_request(url: str, method: str, headers: dict[str, str] | None = None):
+def send_github_request(url: str, method: str, headers: Optional[dict[str, str]] = None):
     if headers is None:
         headers = {
             "Authorization": f"Bearer {GITHUB_ACCESS_TOKEN}",
