@@ -31,6 +31,8 @@ from langchain.chat_models import ChatOpenAI
 from langchain.callbacks.manager import CallbackManager
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 
+from utils.tiktoken import num_tokens_from_string
+
 openai.api_key = OPENAI_API_KEY
 from env import GITHUB_ACCESS_TOKEN
 
@@ -38,6 +40,8 @@ if SOLVETHISJIM_SUPABASE_URL is None:
     raise ValueError("SOLVETHISJIM_SUPABASE_URL must be set")
 if SOLVETHISJIM_SUPABASE_SERVICE_ROLE_KEY is None:
     raise ValueError("SOLVETHISJIM_SUPABASE_SERVICE_ROLE_KEY must be set")
+
+print("Supabase URL:", SOLVETHISJIM_SUPABASE_URL)
 
 supabase: Client = create_client(
     SOLVETHISJIM_SUPABASE_URL, SOLVETHISJIM_SUPABASE_SERVICE_ROLE_KEY
@@ -189,9 +193,19 @@ def run_query(query: str, owner: str, repo_name: str):
     )
 
     code_str = ""
+    MAX_TOKENS = 3500
+
+    current_tokens = 0
 
     for doc in matched_docs:
-        code_str += doc.page_content + "\n\n"
+        doc_content = doc.page_content + "\n\n"
+        doc_tokens = num_tokens_from_string(doc_content)
+        print(matched_docs.index(doc), doc_tokens)
+        if current_tokens + doc_tokens < MAX_TOKENS:
+            code_str += doc_content
+            current_tokens += doc_tokens
+        else:
+            break  # stop adding more content if it exceeds the max token limit
 
     # print("\n\033[35m" + code_str + "\n\033[32m")
 
