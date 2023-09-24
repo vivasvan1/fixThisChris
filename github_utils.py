@@ -31,7 +31,7 @@ from langchain.chat_models import ChatOpenAI
 from langchain.callbacks.manager import CallbackManager
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 
-from utils.tiktoken import num_tokens_from_string
+from utils.tiktoken_utils import num_tokens_from_string
 
 openai.api_key = OPENAI_API_KEY
 from env import GITHUB_ACCESS_TOKEN
