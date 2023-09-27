@@ -4,8 +4,6 @@ from langchain.document_loaders import GitLoader
 import json
 import openai
 import requests
-import openai
-import requests
 from supabase.client import Client, create_client
 from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.text_splitter import CharacterTextSplitter
@@ -15,8 +13,8 @@ import shutil
 from env import (
     OPENAI_API_KEY,
     GITHUB_ACCESS_TOKEN,
-    SOLVETHISJIM_SUPABASE_URL,
-    SOLVETHISJIM_SUPABASE_SERVICE_ROLE_KEY,
+    FIXTHISCHRIS_SUPABASE_URL,
+    FIXTHISCHRIS_SUPABASE_SERVICE_ROLE_KEY,
 )
 
 from langchain import LLMChain
@@ -36,21 +34,105 @@ from utils.tiktoken_utils import num_tokens_from_string
 openai.api_key = OPENAI_API_KEY
 from env import GITHUB_ACCESS_TOKEN
 
-if SOLVETHISJIM_SUPABASE_URL is None:
-    raise ValueError("SOLVETHISJIM_SUPABASE_URL must be set")
-if SOLVETHISJIM_SUPABASE_SERVICE_ROLE_KEY is None:
-    raise ValueError("SOLVETHISJIM_SUPABASE_SERVICE_ROLE_KEY must be set")
+if FIXTHISCHRIS_SUPABASE_URL is None:
+    raise ValueError("FIXTHISCHRIS_SUPABASE_URL must be set")
+if FIXTHISCHRIS_SUPABASE_SERVICE_ROLE_KEY is None:
+    raise ValueError("FIXTHISCHRIS_SUPABASE_SERVICE_ROLE_KEY must be set")
 
-print("Supabase URL:", SOLVETHISJIM_SUPABASE_URL)
+print("Supabase URL:", FIXTHISCHRIS_SUPABASE_URL)
 
 supabase: Client = create_client(
-    SOLVETHISJIM_SUPABASE_URL, SOLVETHISJIM_SUPABASE_SERVICE_ROLE_KEY
+    FIXTHISCHRIS_SUPABASE_URL, FIXTHISCHRIS_SUPABASE_SERVICE_ROLE_KEY
 )
 embeddings = OpenAIEmbeddings()
 
 vector_store = SupabaseVectorStore(
     supabase, embeddings, table_name="documents", query_name="match_documents"
 )
+
+
+USAGE_LIMIT = 5
+
+
+class RepoNotFound(Exception):
+    def __init__(self, *args: object) -> None:
+        super().__init__(*args)
+        self.repo = args[0]
+
+    def __str__(self) -> str:
+        return super().__str__() + f"Repo {self.repo} not found"
+
+
+class UsageLimitExceeded(Exception):
+    def __init__(self, *args: object) -> None:
+        super().__init__(*args)
+        self.repo = args[0]
+
+    def __str__(self) -> str:
+        return super().__str__() + f"Usage limit exceeded for repo {self.repo}"
+
+
+def get_usage_limit(repo: str):
+    result = (
+        supabase.table("usage-limits")
+        .select("number_of_times_used_today")
+        .eq("repo", repo)
+        .execute()
+    )
+    return result.data
+
+
+def is_rate_limit_reached(repo: str) -> bool:
+    if repo is None or repo.strip() == "":
+        raise ValueError("Repository name must be provided.")
+
+    usage_limit = get_usage_limit(repo)
+    print("Usage limit:", usage_limit)
+    if not usage_limit:
+        insert_result = (
+            supabase.table("usage-limits")
+            .insert({"repo": repo, "number_of_times_used_today": 1})
+            .execute()
+        )
+
+        if insert_result.data:
+            print("Inserted repo into usage-limits table")
+            return False
+        else:
+            raise Exception("Failed to insert repo into usage-limits table")
+
+    usage_limit = usage_limit[0]
+    return usage_limit["number_of_times_used_today"] >= USAGE_LIMIT
+
+
+def increment_usage_limit(repo: str) -> int:
+    if repo is None or repo.strip() == "":
+        raise ValueError("Repository name must be provided.")
+
+    usage_limit = get_usage_limit(repo)
+    print("Usage limit:", usage_limit)
+
+    if not usage_limit:
+        raise Exception("Repository not found in usage-limits table")
+
+    usage_limit = usage_limit[0]
+    updated_count = usage_limit["number_of_times_used_today"] + 1
+    update_result = (
+        supabase.table("usage-limits")
+        .update({"number_of_times_used_today": updated_count})
+        .eq("repo", repo)
+        .execute()
+    )
+
+    if not update_result.data:
+        raise Exception("Failed to update usage-limits table")
+
+    return updated_count
+
+
+def reset_usage_limits():
+    # Reset the number_of_times_used_today for all repos at the end of the day
+    result = supabase.table('usage_limits').update({'number_of_times_used_today': 0}).execute()
 
 
 def fetch_all_files_in_repo(owner, repo):
@@ -210,7 +292,7 @@ def run_query(query: str, owner: str, repo_name: str):
     # print("\n\033[35m" + code_str + "\n\033[32m")
 
     template = """
-    You are Codebase AI. You are a superintelligent AI that answers questions about codebases.
+    You are Codebase AI. You are a super intelligent AI that answers questions about code bases.
 
     You are:
     - helpful & friendly
@@ -221,12 +303,12 @@ def run_query(query: str, owner: str, repo_name: str):
     The user will ask a question about their codebase, and you will answer it.
 
     When the user asks their question, you will answer it by searching the codebase for the answer.
-
+    
     Here is the user's question and code file(s) you found to answer the question:
-
+    
     Question:
     {query}
-
+    
     Code file(s):
     {code}
     

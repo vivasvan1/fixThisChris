@@ -1,11 +1,11 @@
-# SolveThisJim ( Note: In Developement )
+# FixThisChris ( Note: In Developement )
 
 This is a github bot to solve issues and PR's and produceses responses.
 
 ## Usage
 
-1. Add @SolveThisJim as a contributor.
-2. Mention @SolveThisJim on any issue you wish to solve.
+1. Add @fixThisChris as a contributor.
+2. Mention @fixThisChris on any issue you wish to solve.
 
 ## Setup For Contributors
 

@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from flask import Flask, request, jsonify
 import openai
 import requests
@@ -5,7 +6,12 @@ import os
 import logging
 
 from env import OPENAI_API_KEY, GITHUB_ACCESS_TOKEN
-from github_utils import run_query
+from utils.github_utils import (
+    USAGE_LIMIT,
+    is_rate_limit_reached,
+    reset_usage_limits,
+    run_query,
+)
 
 app = Flask(__name__)
 
@@ -148,7 +154,7 @@ def generate_gpt_prompt(issue_data):
     if issue_comments:
         for comment in issue_comments:
             if not (
-                comment.get("user").get("login") == "SolveThisJim"
+                comment.get("user").get("login") == "fixThisChris"
                 or comment.get("user").get("login") == "github-actions[bot]"
                 or comment.get("user").get("login") == "dependabot[bot]"
             ):
@@ -161,6 +167,55 @@ def generate_gpt_prompt(issue_data):
     return gpt_prompt
 
 
+class FailedToFetchIssueException(Exception):
+    pass
+
+
+def solve_problem(mention, issue_number, issue_description):
+    issue_data = fetch_issue(
+        mention["repository"]["owner"]["login"],
+        mention["repository"]["name"],
+        issue_number,
+    )
+
+    if not issue_data:
+        raise FailedToFetchIssueException()
+
+    prompt = generate_gpt_prompt(issue_data)
+
+    out = run_query(
+        prompt,
+        mention["repository"]["owner"]["login"],
+        mention["repository"]["name"],
+    )
+
+    # response = generate_response(issue_description)
+    # print(response)
+    post_comment_to_issue(
+        issue_number,
+        out,
+        mention["repository"]["owner"]["login"],
+        mention["repository"]["name"],
+    )
+
+    # Mark notification as read
+    mark_issue_notification_as_read(mention["id"], issue_number)
+
+
+def time_remaining_to_reset():
+    # Get the current time
+    now = datetime.now()
+
+    # Construct a datetime object for the next midnight
+    next_midnight = datetime(now.year, now.month, now.day) + timedelta(days=1)
+
+    # Calculate the difference between the current time and the next midnight
+    remaining_time = next_midnight - now
+
+    # Return the remaining time as a timedelta object
+    return remaining_time
+
+
 def respond_to_unread_issues():
     unread_mentions = fetch_unread_mentions()
     # print(unread_mentions)
@@ -170,38 +225,47 @@ def respond_to_unread_issues():
         issue_description = mention["subject"]["title"]
         print(f"Issue {issue_number} is unread")
 
-        issue_data = fetch_issue(
-            mention["repository"]["owner"]["login"],
-            mention["repository"]["name"],
-            issue_number,
-        )
+        rate_limit_exceeded = is_rate_limit_reached(mention["repository"]["name"])
 
-        if not issue_data:
-            continue
-        prompt = generate_gpt_prompt(issue_data)
+        if not rate_limit_exceeded:
+            try:
+                solve_problem(mention, issue_number, issue_description)
+            except FailedToFetchIssueException:
+                continue
+        else:
+            remaining_time = time_remaining_to_reset()
+            hours, remainder = divmod(remaining_time.total_seconds(), 3600)
+            minutes, seconds = divmod(remainder, 60)
+            print(f"Rate limit exceeded for {mention['repository']['name']}.")
+            post_comment_to_issue(
+                issue_number=issue_number,
+                comment_text=f"""#### 🛑 **Rate Limit Exceeded!**
 
-        out = run_query(
-            prompt,
-            mention["repository"]["owner"]["login"],
-            mention["repository"]["name"],
-        )
+⌛ **Limit:** {USAGE_LIMIT} requests / day / repository
+🔒 **Refreshes In:** {int(hours)} hours, {int(minutes)} minutes
 
-        # response = generate_response(issue_description)
-        # print(response)
-        post_comment_to_issue(
-            issue_number,
-            out,
-            mention["repository"]["owner"]["login"],
-            mention["repository"]["name"],
-        )
+<!-- To continue using the service, please consider upgrading to our **Pro Plan**.
 
-        # Mark notification as read
-        mark_issue_notification_as_read(mention["id"], issue_number)
+##### 🚀 **Upgrade to Pro**
+Upgrade to the Pro Plan to enjoy enhanced access, faster response times, and priority support. Click [here](Upgrade_Link) to upgrade now! -->
+
+📬 For any inquiries for support or rate limit extension, please contact <a href="https://discord.gg/T6Hz6zpK7D" target="_blank">Support</a>.""",
+                OWNER=mention["repository"]["owner"]["login"],
+                REPO=mention["repository"]["name"],
+            )
+
+            # Mark notification as read
+            mark_issue_notification_as_read(mention["id"], issue_number)
 
 
 scheduler = BackgroundScheduler()
 scheduler.add_job(func=accept_github_invitations, trigger="interval", seconds=30)
 scheduler.add_job(func=respond_to_unread_issues, trigger="interval", seconds=30)
+
+
+# Schedule the task to reset limits
+scheduler.add_job(func=reset_usage_limits, trigger="cron", hour=0, minute=0)
+
 scheduler.start()
 
 # Shut down the scheduler when exiting the app
