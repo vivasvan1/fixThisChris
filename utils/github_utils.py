@@ -123,6 +123,7 @@ def increment_usage_limit(repo: str) -> int:
         .eq("repo", repo)
         .execute()
     )
+    print("Updated Limit:", update_result)
 
     if not update_result.data:
         raise Exception("Failed to update usage-limits table")

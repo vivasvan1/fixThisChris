@@ -8,6 +8,7 @@ import logging
 from env import OPENAI_API_KEY, GITHUB_ACCESS_TOKEN
 from utils.github_utils import (
     USAGE_LIMIT,
+    increment_usage_limit,
     is_rate_limit_reached,
     reset_usage_limits,
     run_query,
@@ -230,6 +231,7 @@ def respond_to_unread_issues():
         if not rate_limit_exceeded:
             try:
                 solve_problem(mention, issue_number, issue_description)
+                increment_usage_limit(mention["repository"]["name"])
             except FailedToFetchIssueException:
                 continue
         else:
