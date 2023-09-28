@@ -133,7 +133,8 @@ def increment_usage_limit(repo: str) -> int:
 
 def reset_usage_limits():
     # Reset the number_of_times_used_today for all repos at the end of the day
-    result = supabase.table('usage_limits').update({'number_of_times_used_today': 0}).execute()
+    result = supabase.table('usage-limits').update({'number_of_times_used_today': 0}).filter("uuid","neq","00000000-0000-0000-0000-000000000000").execute()
+
 
 
 def fetch_all_files_in_repo(owner, repo):
