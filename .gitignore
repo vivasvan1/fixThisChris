@@ -1,3 +1,8 @@
 venv
 __pycache__
 .env
+
+
+# Public DevImages
+public/github_images/hero.xcf
+public/github_images/bing_generated_image.jpeg
