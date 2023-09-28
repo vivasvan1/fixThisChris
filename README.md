@@ -1,6 +1,16 @@
-# FixThisChris
+<p align="center">
+<img height="500px" src="https://github.com/vivasvan1/fixThisChris/assets/21074796/97c77b29-d326-40a2-8c29-be8c8edc9266">
+</p>
+<p align="center">
 
-![Discord](https://img.shields.io/discord/1156433559695937596?label=Discord)
+<a href="https://discord.gg/ZtRwXYjyrz">
+  <img src="https://dcbadge.vercel.app/api/server/ZtRwXYjyrz?style=flat" />
+</a>
+<img alt="Discord" src="https://img.shields.io/discord/1156433559695937596?label=Discord&color=5865F2">
+  
+</a>
+
+</p>
 
 FixThisChris is a GitHub bot designed to swiftly address issues by generating intelligent responses. By leveraging this bot, you can automate the preliminary troubleshooting and resolution suggestions, thus speeding up the project maintenance process.
 
