@@ -180,11 +180,14 @@ def get_default_branch(owner, repo):
 def create_embedding_of_repo(repo_url: str, default_branch: str):
     owner = repo_url.split("/")[3]
     repo_name = repo_url.split("/")[4].split(".git")[0]
+    repo_url_with_token = repo_url.replace('https://', f'https://{GITHUB_ACCESS_TOKEN}@')
     loader = GitLoader(
-        clone_url=repo_url,
+        clone_url=repo_url_with_token,
         repo_path="repo",
         branch=default_branch,
+        
     )
+
     loader.load()
 
     # configure these to fit your needs
