@@ -1,4 +1,6 @@
-# FixThisChris (Under Development)
+# FixThisChris
+
+![Discord](https://img.shields.io/discord/1156433559695937596?label=Discord)
 
 FixThisChris is a GitHub bot designed to swiftly address issues and pull requests (PRs) by generating intelligent responses. By leveraging this bot, you can automate the preliminary troubleshooting and resolution suggestions, thus speeding up the project maintenance process.
 
