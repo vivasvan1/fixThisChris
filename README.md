@@ -4,6 +4,10 @@
 
 FixThisChris is a GitHub bot designed to swiftly address issues and pull requests (PRs) by generating intelligent responses. By leveraging this bot, you can automate the preliminary troubleshooting and resolution suggestions, thus speeding up the project maintenance process.
 
+## 🎉 Now Fully Open Source 🎉
+
+We believe in the power of open source and are committed to maintaining FixThisChris as a fully open-source project. The source code is freely available for inspection, modification, and redistribution under the terms of the MIT License. We welcome and encourage community contributions and collaboration. Together, we can make FixThisChris better for everyone!
+
 ## Usage
 
 1. Invite `@fixThisChris` as a contributor to your repository.
