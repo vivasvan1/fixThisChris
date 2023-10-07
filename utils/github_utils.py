@@ -273,11 +273,76 @@ def setup_repo(owner, repo_name):
         print("Repo already exists")
 
 
+import difflib
+
 def run_query(query: str, owner: str, repo_name: str):
     setup_repo(owner, repo_name)
     matched_docs = vector_store.similarity_search(
         query, filter={"repo_name": repo_name}
     )
+
+    code_str = ""
+    MAX_TOKENS = 3500
+
+    current_tokens = 0
+
+    for doc in matched_docs:
+        doc_content = doc.page_content + "\n\n"
+        doc_tokens = num_tokens_from_string(doc_content)
+        print(matched_docs.index(doc), doc_tokens)
+        if current_tokens + doc_tokens < MAX_TOKENS:
+            code_str += doc_content
+            current_tokens += doc_tokens
+        else:
+            break  # stop adding more content if it exceeds the max token limit
+
+    template = """
+    You are Codebase AI. You are a super intelligent AI that answers questions about code bases.
+
+    You are:
+    - helpful & friendly
+    - good at answering complex questions in simple language
+    - an expert in all programming languages
+    - able to infer the intent of the user's question
+
+    The user will ask a question about their codebase, and you will answer it.
+
+    When the user asks their question, you will answer it by searching the codebase for the answer.
+    
+    Here is the user's question and code file(s) you found to answer the question:
+    
+    Question:
+    {query}
+    
+    Code file(s):
+    {code}
+    
+    [END OF CODE FILE(S)]w
+
+    Now answer the question using the code file(s) above.
+    """
+
+    chat = ChatOpenAI(
+        streaming=True,
+        callback_manager=CallbackManager([StreamingStdOutCallbackHandler()]),
+        verbose=True,
+        temperature=0.5,
+    )
+    system_message_prompt = SystemMessagePromptTemplate.from_template(template)
+    chat_prompt = ChatPromptTemplate.from_messages([system_message_prompt])
+    chain = LLMChain(llm=chat, prompt=chat_prompt)
+
+    print("running chain...")
+    ai_said = chain.run(code=code_str, query=query)
+    print("chain output...")
+
+    # Generate patch file
+    original_code = code_str.splitlines()
+    modified_code = code_str.replace(query, ai_said).splitlines()
+    diff = difflib.unified_diff(original_code, modified_code)
+    patch_file = '\n'.join(diff)
+
+    return ai_said, patch_file
 
     code_str = ""
     MAX_TOKENS = 3500
