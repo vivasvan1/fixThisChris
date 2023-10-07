@@ -11,19 +11,12 @@ from utils.github_utils import (
     increment_usage_limit,
     is_rate_limit_reached,
     reset_usage_limits,
-    from utils.github_utils import (
-        USAGE_LIMIT,
-        increment_usage_limit,
-        is_rate_limit_reached,
-        reset_usage_limits,
-        run_query,
-    )
+    run_query,
 )
 
 app = Flask(__name__)
 
 openai.api_key = OPENAI_API_KEY
-
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
