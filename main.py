@@ -11,7 +11,13 @@ from utils.github_utils import (
     increment_usage_limit,
     is_rate_limit_reached,
     reset_usage_limits,
-    run_query,
+    from utils.github_utils import (
+        USAGE_LIMIT,
+        increment_usage_limit,
+        is_rate_limit_reached,
+        reset_usage_limits,
+        run_query,
+    )
 )
 
 app = Flask(__name__)
@@ -184,17 +190,22 @@ def solve_problem(mention, issue_number, issue_description):
 
     prompt = generate_gpt_prompt(issue_data)
 
-    out = run_query(
+    ai_response, patch_file = run_query(
         prompt,
         mention["repository"]["owner"]["login"],
         mention["repository"]["name"],
     )
 
-    # response = generate_response(issue_description)
-    # print(response)
     post_comment_to_issue(
         issue_number,
-        out,
+        ai_response,
+        mention["repository"]["owner"]["login"],
+        mention["repository"]["name"],
+    )
+
+    post_comment_to_issue(
+        issue_number,
+        patch_file,
         mention["repository"]["owner"]["login"],
         mention["repository"]["name"],
     )
@@ -242,16 +253,16 @@ def respond_to_unread_issues():
             post_comment_to_issue(
                 issue_number=issue_number,
                 comment_text=f"""#### 🛑 **Rate Limit Exceeded!**
-
-⌛ **Limit:** {USAGE_LIMIT} requests / day / repository
-🔒 **Refreshes In:** {int(hours)} hours, {int(minutes)} minutes
-
-<!-- To continue using the service, please consider upgrading to our **Pro Plan**.
-
-##### 🚀 **Upgrade to Pro**
-Upgrade to the Pro Plan to enjoy enhanced access, faster response times, and priority support. Click [here](Upgrade_Link) to upgrade now! -->
-
-📬 For any inquiries for support or rate limit extension, please contact <a href="https://discord.gg/T6Hz6zpK7D" target="_blank">Support</a>.""",
+            
+            ⌛ **Limit:** {USAGE_LIMIT} requests / day / repository
+            🔒 **Refreshes In:** {int(hours)} hours, {int(minutes)} minutes
+            
+            <!-- To continue using the service, please consider upgrading to our **Pro Plan**.
+            
+            ##### 🚀 **Upgrade to Pro**
+            Upgrade to the Pro Plan to enjoy enhanced access, faster response times, and priority support. Click [here](Upgrade_Link) to upgrade now! -->
+            
+            📬 For any inquiries for support or rate limit extension, please contact <a href="https://discord.gg/T6Hz6zpK7D" target="_blank">Support</a>.""",
                 OWNER=mention["repository"]["owner"]["login"],
                 REPO=mention["repository"]["name"],
             )
@@ -287,7 +298,6 @@ atexit.register(lambda: scheduler.shutdown())
 #         response = generate_response(problem_description)
 
 #         # Post the response as a comment on the issue
-#         post_comment_to_issue(issue_number, response)
 
 #     return jsonify({"message": "Webhook processed successfully"})
 
